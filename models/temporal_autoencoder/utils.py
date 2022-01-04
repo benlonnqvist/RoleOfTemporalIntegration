@@ -4,13 +4,8 @@ import imageio
 import skimage.transform
 import numpy as np
 
-
-from src.dataset_fn import DATASET_MEAN, DATASET_STD
-
-DATASET_MEAN = np.array(DATASET_MEAN)[None, :, None, None, None]
-DATASET_STD = np.array(DATASET_STD)[None, :, None, None, None]
-
-from src.loss_fn import FocalLoss, DiceLoss
+from ..loss_fn import FocalLoss, DiceLoss
+from roleoftemporalintegration.dataset_fn import stack_input_noise
 
 bce_loss_fn = nn.BCEWithLogitsLoss()
 mse_loss_fn = nn.MSELoss()
@@ -20,7 +15,7 @@ dice_loss_fn = DiceLoss()
 
 
 def train_fn(train_dl, model, optimizer, loss_weight,
-             t_start, n_backprop_frames, epoch, integration_period, plot_gif=True):
+             t_start, n_backprop_frames, epoch, timeseries_data=False, num_integration_frames=1, plot_gif=True):
     model.train()
     plot_loss_train = 0.0
     n_batches = len(train_dl)
@@ -29,12 +24,19 @@ def train_fn(train_dl, model, optimizer, loss_weight,
         for batch_idx, (batch, _) in enumerate(train_dl):
             batch_loss_train = 0.0
             A_seq, P_seq = [], []
-            num_integration_batches = batch.shape[-1] // integration_period
+            if timeseries_data:
+                num_integration_batches = batch.shape[-1] // num_integration_frames
+            else:
+                num_integration_batches = 1
             for t in range(num_integration_batches):
-                input = batch[..., t * integration_period : (t + 1) * integration_period].to(device='cuda')
+                if timeseries_data:
+                    input = batch[..., t * num_integration_frames : (t + 1) * num_integration_frames].to(device='cuda')
+                    A = torch.movedim(input, -1, 2)
+                else:
+                    input = stack_input_noise(batch, num_integration_frames).to(device='cuda')
+                    A = input
                 #target_batch = batch[..., t * integration_period + 10 : (t + 1) * integration_period + 10].to(device='cuda')
                 #target = torch.movedim(target_batch, -1, 2)
-                A = torch.movedim(input, -1, 2)
                 P = model(A)
                 A_seq.append(A.detach().cpu())
                 P_seq.append(P.detach().cpu())

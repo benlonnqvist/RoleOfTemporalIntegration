@@ -5,11 +5,35 @@ import torchvision.transforms.functional as TF
 import os
 import random
 import torch
+import einops
 from PIL import Image
+import torchvision.datasets as datasets
 # DATASET_MEAN = [0.38, 0.38, 0.38]
 # DATASET_STD = [0.28, 0.28, 0.28]
 DATASET_MEAN = [0.00, 0.00, 0.00]  # use this to have data between 0.0 and 1.0
 DATASET_STD = [1.00, 1.00, 1.00]  # use this to have data between 0.0 and 1.0
+
+
+# 3 things: basic condition with no noise,
+# condition with input noise
+# condition with internal noise
+def get_cifar_dataset(batch_size=1):
+    transform = IT.Compose(
+        [IT.ToTensor(),
+         IT.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    )
+    trainset = datasets.CIFAR10(root=r'C:\Users\loennqvi\Github\roleoftemporalintegration\data', train=True, download=True, transform=transform)
+    trainloader = data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
+    
+    testset = datasets.CIFAR10(root=r'C:\Users\loennqvi\Github\roleoftemporalintegration\data', train=False, download=True, transform=transform)
+    testloader = data.DataLoader(testset, batch_size=batch_size, shuffle=False)
+
+    return trainloader, testloader
+
+
+def stack_input_noise(input_image, num_frames):
+    # TODO: add noise
+    return einops.repeat(input_image, 'b c h w -> b c d h w', d=num_frames)
 
 
 class Mots_Dataset(data.Dataset):

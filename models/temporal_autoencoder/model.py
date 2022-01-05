@@ -4,6 +4,122 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from copy import deepcopy
+from torch.nn import init
+from torch.autograd import Variable
+
+
+def reparametrize(mu, logvar, mult=0, pos=None):
+    std = logvar.div(2).exp()
+    #new_mu = deepcopy(mu)
+    eps = Variable(std.data.new(std.size()).normal_())
+    #new_mu[0][pos] += mult * std[0][pos] # * eps[0][0]
+    return mu + std * eps # * mult
+
+
+class View(nn.Module):
+    def __init__(self, size):
+        super(View, self).__init__()
+        self.size = size
+
+    def forward(self, tensor):
+        return tensor.view(self.size)
+
+
+class BetaVAE_H(nn.Module):
+    """Model proposed in original beta-VAE paper(Higgins et al, ICLR, 2017)."""
+
+    def __init__(self, model_name, z_dim=100, nc=3):
+        super(BetaVAE_H, self).__init__()
+        self.model_name = model_name
+        self.z_dim = z_dim
+        self.nc = nc
+        self.encoder = nn.Sequential(
+            nn.Conv3d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
+            nn.ReLU(True),
+            #nn.BatchNorm3d(32),
+            nn.Conv3d(32, 32, 4, 2, 1),          # B,  32, 16, 16
+            nn.ReLU(True),
+            #nn.BatchNorm3d(32),
+            nn.Conv3d(32, 64, 4, 2, 1),          # B,  64,  8,  8
+            nn.ReLU(True),
+            #nn.BatchNorm3d(64),
+            nn.Conv3d(64, 256, 4, 2, 1),          # B,  64,  4,  4
+            nn.ReLU(True),
+            #nn.BatchNorm3d(256),
+            # nn.Conv3d(64, 64, 4, 2, 1),            # B, 256,  1,  1
+            # nn.ReLU(True),
+            # nn.Conv3d(64, 256, 4, 1),  # B, 256,  1,  1
+            # nn.ReLU(True),
+            #nn.BatchNorm2d(num_features=256),
+            View((-1, 256*2*2)),                 # B, 256
+            nn.Linear(256*2*2, z_dim*2),             # B, z_dim*2
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(z_dim, 256*2*2),               # B, 256
+            View((-1, 256, 1, 2, 2)),               # B, 256,  1,  1
+            nn.ReLU(True),
+            nn.ConvTranspose3d(256, 64, 4, 2, 1), # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.ConvTranspose3d(64, 32, 4, 2, 1), # B,  32, 32, 32
+            nn.ReLU(True),
+            nn.ConvTranspose3d(32, 32, 4, 2, 1),  # B, nc, 64, 64
+            nn.ReLU(True),
+            nn.ConvTranspose3d(32, nc, 4, 2, 1)
+        )
+
+        self.weight_init()
+        self.to('cuda')
+
+    def weight_init(self):
+        for block in self._modules:
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def forward(self, x, mult=None, pos=None):
+        distributions = self._encode(x)
+        logvar = distributions[:, self.z_dim:]
+        mu = distributions[:, :self.z_dim]  # to test how values change the output images, vary mu only, not logvar
+        if mult is None:
+
+            # 1. run inference on an image
+            # 2. fix all the latent variables, then traverse one across a few standard deviations
+            # 3. plot each traversal node
+            # 10 latent variables x 5 images per variable = 50 traversal images
+            # logvar = distributions[:, self.z_dim:]
+
+            z = reparametrize(mu, logvar)
+            x_recon = self._decode(z)
+
+            return x_recon, mu, logvar
+        z = reparametrize(mu, logvar, mult, pos)
+        x_recon = self._decode(z)
+        return x_recon, mu, logvar
+
+    def _encode(self, x):
+        return self.encoder(x)
+
+    def _decode(self, z):
+        return self.decoder(z)
+
+    def save_model(self, epoch):
+        model_savepath = f'./ckpt/{self.model_name}/pth/{epoch}.pth'
+        torch.save(self.state_dict(), model_savepath)
+
+    @classmethod
+    def load_model(cls, model_name, epoch):
+        # model name used here
+        raise NotImplementedError
+
+
+def kaiming_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv3d)):
+        init.kaiming_normal(m.weight)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
 
 
 class TemporalAutoencoder(nn.Module):

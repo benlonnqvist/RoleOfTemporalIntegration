@@ -19,8 +19,7 @@ DATASET_STD = [1.00, 1.00, 1.00]  # use this to have data between 0.0 and 1.0
 # condition with internal noise
 def get_cifar_dataset(batch_size=1):
     transform = IT.Compose(
-        [IT.ToTensor(),
-         IT.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        [IT.ToTensor()]
     )
     trainset = datasets.CIFAR10(root=r'C:\Users\loennqvi\Github\roleoftemporalintegration\data', train=True, download=True, transform=transform)
     trainloader = data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
@@ -31,9 +30,15 @@ def get_cifar_dataset(batch_size=1):
     return trainloader, testloader
 
 
-def stack_input_noise(input_image, num_frames):
+def stack_input_noise(input_image, num_frames, batch_size, test=False):
     # TODO: add noise
-    return einops.repeat(input_image, 'b c h w -> b c d h w', d=num_frames)
+    if test:
+        # noise has mean 0 and std 0.1
+        noise = 0.1 * torch.randn((batch_size, 3, num_frames, 32, 32))
+        cifar = einops.repeat(input_image, 'b c h w -> b c d h w', d=num_frames)
+        out = cifar + noise
+        return torch.clip(out, min=0, max=1)
+    return torch.clip(einops.repeat(input_image, 'b c h w -> b c d h w', d=num_frames), min=0, max=1)
 
 
 class Mots_Dataset(data.Dataset):

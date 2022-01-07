@@ -9,6 +9,9 @@ torch.manual_seed(42)
 random.seed(42)
 np.random.seed(42)
 
+# 1. make sqm dataset
+# 2. make models on the rome list
+# 3. test them on sqm
 
 def instantiate_model():
     load_model, n_epochs_run, n_epoch_save, epoch_to_load = False, 1000, 10, 300

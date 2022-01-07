@@ -64,7 +64,8 @@ class BetaVAE_H(nn.Module):
             nn.ReLU(True),
             nn.ConvTranspose3d(32, 32, 4, 2, 1),  # B, nc, 64, 64
             nn.ReLU(True),
-            nn.ConvTranspose3d(32, nc, 4, 2, 1)
+            nn.ConvTranspose3d(32, nc, 4, 2, 1),
+            nn.Sigmoid()
         )
 
         self.weight_init()
